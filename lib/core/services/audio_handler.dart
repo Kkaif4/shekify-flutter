@@ -78,25 +78,32 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
 
   @override
   Future<void> playMediaItem(MediaItem item) async {
+    print('DEBUG: ShekifyAudioHandler.playMediaItem starting for track: ${item.id}');
     mediaItem.add(item);
     try {
       String urlStr = item.extras?['url'] ?? '';
+      print('DEBUG: Original URL in mediaItem: $urlStr');
       
       // Check if the track has been cached locally (skip web as caching is disabled there)
       final uri = Uri.parse(urlStr);
       if (!uri.scheme.toLowerCase().startsWith('file')) {
         final isCached = await CacheManager.instance.isCached(item.id);
+        print('DEBUG: Cache check for ${item.id}: isCached = $isCached');
         if (isCached) {
           final file = await CacheManager.instance.getCacheFile(item.id);
           urlStr = 'file://${file.path}';
+          print('DEBUG: Found in cache, resolved to: $urlStr');
         }
       }
 
       final finalUri = Uri.parse(urlStr);
+      print('DEBUG: Resolved playback URI: $finalUri');
       if (finalUri.scheme.toLowerCase() == 'file') {
+        print('DEBUG: Loading local file source: ${finalUri.toFilePath()}');
         await _player.setAudioSource(AudioSource.file(finalUri.toFilePath()));
       } else {
         final token = await SecureStorage.instance.getAccessToken();
+        print('DEBUG: Loading remote URI source with auth header. Token present: ${token != null}');
         await _player.setAudioSource(
           AudioSource.uri(
             finalUri,
@@ -107,9 +114,12 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
           ),
         );
       }
-      play();
-    } catch (e) {
-      print('Error playing media item: $e');
+      print('DEBUG: setAudioSource completed successfully. Calling play()...');
+      await play();
+      print('DEBUG: play() called successfully.');
+    } catch (e, stackTrace) {
+      print('DEBUG ERROR: Exception in playMediaItem: $e');
+      print('DEBUG STACKTRACE: $stackTrace');
       playbackState.add(playbackState.value.copyWith(
         errorMessage: e.toString(),
       ));
