@@ -1,0 +1,267 @@
+import 'dart:async';
+import 'package:audio_service/audio_service.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/services/audio_handler.dart';
+import '../../data/player_repository.dart';
+import '../../domain/track.dart';
+
+// --- Events ---
+abstract class PlayerEvent {}
+
+class PlayTrackEvent extends PlayerEvent {
+  final Track track;
+  PlayTrackEvent(this.track);
+}
+
+class PlayQueueEvent extends PlayerEvent {
+  final List<Track> queue;
+  final int startIndex;
+  PlayQueueEvent(this.queue, this.startIndex);
+}
+
+class PauseEvent extends PlayerEvent {}
+
+class ResumeEvent extends PlayerEvent {}
+
+class SeekToEvent extends PlayerEvent {
+  final Duration position;
+  SeekToEvent(this.position);
+}
+
+class NextTrackEvent extends PlayerEvent {}
+
+class PreviousTrackEvent extends PlayerEvent {}
+
+class PlaybackStateChangedEvent extends PlayerEvent {
+  final PlaybackState state;
+  PlaybackStateChangedEvent(this.state);
+}
+
+class CurrentMediaItemChangedEvent extends PlayerEvent {
+  final MediaItem? item;
+  CurrentMediaItemChangedEvent(this.item);
+}
+
+class PlayerPositionChangedEvent extends PlayerEvent {
+  final Duration position;
+  PlayerPositionChangedEvent(this.position);
+}
+
+class PlayerDurationChangedEvent extends PlayerEvent {
+  final Duration? duration;
+  PlayerDurationChangedEvent(this.duration);
+}
+
+// --- State ---
+class PlayerStatus {
+  final Track? currentTrack;
+  final List<Track> queue;
+  final bool isPlaying;
+  final bool isBuffering;
+  final Duration position;
+  final Duration bufferedPosition;
+  final Duration duration;
+  final String? errorMessage;
+
+  PlayerStatus({
+    this.currentTrack,
+    this.queue = const [],
+    this.isPlaying = false,
+    this.isBuffering = false,
+    this.position = Duration.zero,
+    this.bufferedPosition = Duration.zero,
+    this.duration = Duration.zero,
+    this.errorMessage,
+  });
+
+  PlayerStatus copyWith({
+    Track? Function()? currentTrack,
+    List<Track>? queue,
+    bool? isPlaying,
+    bool? isBuffering,
+    Duration? position,
+    Duration? bufferedPosition,
+    Duration? duration,
+    String? Function()? errorMessage,
+  }) {
+    return PlayerStatus(
+      currentTrack: currentTrack != null ? currentTrack() : this.currentTrack,
+      queue: queue ?? this.queue,
+      isPlaying: isPlaying ?? this.isPlaying,
+      isBuffering: isBuffering ?? this.isBuffering,
+      position: position ?? this.position,
+      bufferedPosition: bufferedPosition ?? this.bufferedPosition,
+      duration: duration ?? this.duration,
+      errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
+    );
+  }
+}
+
+// --- BLoC ---
+class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
+  final PlayerRepository _playerRepository;
+  final ShekifyAudioHandler _audioHandler;
+  late final List<StreamSubscription> _subscriptions;
+
+  PlayerBloc(this._playerRepository, this._audioHandler) : super(PlayerStatus()) {
+    on<PlayTrackEvent>(_onPlayTrack);
+    on<PlayQueueEvent>(_onPlayQueue);
+    on<PauseEvent>(_onPause);
+    on<ResumeEvent>(_onResume);
+    on<SeekToEvent>(_onSeekTo);
+    on<NextTrackEvent>(_onNextTrack);
+    on<PreviousTrackEvent>(_onPreviousTrack);
+    on<PlaybackStateChangedEvent>(_onPlaybackStateChanged);
+    on<CurrentMediaItemChangedEvent>(_onCurrentMediaItemChanged);
+    on<PlayerPositionChangedEvent>(_onPlayerPositionChanged);
+    on<PlayerDurationChangedEvent>(_onPlayerDurationChanged);
+
+    // Subscribe to ShekifyAudioHandler streams to keep BLoC in sync
+    _subscriptions = [
+      _audioHandler.playbackState.listen((state) {
+        add(PlaybackStateChangedEvent(state));
+      }),
+      _audioHandler.mediaItem.listen((item) {
+        add(CurrentMediaItemChangedEvent(item));
+      }),
+      _audioHandler.player.positionStream.listen((pos) {
+        add(PlayerPositionChangedEvent(pos));
+      }),
+      _audioHandler.player.durationStream.listen((dur) {
+        add(PlayerDurationChangedEvent(dur));
+      }),
+    ];
+  }
+
+  @override
+  Future<void> close() {
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    return super.close();
+  }
+
+  Future<void> _onPlayTrack(
+    PlayTrackEvent event,
+    Emitter<PlayerStatus> emit,
+  ) async {
+    final track = event.track;
+    emit(state.copyWith(
+      currentTrack: () => track,
+      queue: [track],
+    ));
+
+    final localSource = await _playerRepository.getAudioSourcePath(track.id);
+    final mediaItem = track.toMediaItem(localSource);
+    
+    await _audioHandler.updateQueue([mediaItem]);
+    await _audioHandler.playMediaItem(mediaItem);
+    await _playerRepository.logPlayback(track.id);
+  }
+
+  Future<void> _onPlayQueue(
+    PlayQueueEvent event,
+    Emitter<PlayerStatus> emit,
+  ) async {
+    emit(state.copyWith(
+      queue: event.queue,
+    ));
+
+    final mediaItems = <MediaItem>[];
+    for (final track in event.queue) {
+      // Setup relative placeholders for fast queue updates
+      mediaItems.add(track.toMediaItem(''));
+    }
+    await _audioHandler.updateQueue(mediaItems);
+
+    final startTrack = event.queue[event.startIndex];
+    final localSource = await _playerRepository.getAudioSourcePath(startTrack.id);
+    final mediaItem = startTrack.toMediaItem(localSource);
+
+    // Update the media item inside the handler queue with valid url
+    final updatedQueue = List<MediaItem>.from(_audioHandler.queue.value);
+    final idx = updatedQueue.indexWhere((item) => item.id == startTrack.id);
+    if (idx != -1) {
+      updatedQueue[idx] = mediaItem;
+      await _audioHandler.updateQueue(updatedQueue);
+    }
+
+    await _audioHandler.playMediaItem(mediaItem);
+    await _playerRepository.logPlayback(startTrack.id);
+  }
+
+  Future<void> _onPause(PauseEvent event, Emitter<PlayerStatus> emit) async {
+    await _audioHandler.pause();
+  }
+
+  Future<void> _onResume(ResumeEvent event, Emitter<PlayerStatus> emit) async {
+    await _audioHandler.play();
+  }
+
+  Future<void> _onSeekTo(SeekToEvent event, Emitter<PlayerStatus> emit) async {
+    await _audioHandler.seek(event.position);
+  }
+
+  Future<void> _onNextTrack(NextTrackEvent event, Emitter<PlayerStatus> emit) async {
+    await _audioHandler.skipToNext();
+  }
+
+  Future<void> _onPreviousTrack(PreviousTrackEvent event, Emitter<PlayerStatus> emit) async {
+    await _audioHandler.skipToPrevious();
+  }
+
+  void _onPlaybackStateChanged(
+    PlaybackStateChangedEvent event,
+    Emitter<PlayerStatus> emit,
+  ) {
+    emit(state.copyWith(
+      isPlaying: event.state.playing,
+      isBuffering: event.state.processingState == AudioProcessingState.buffering ||
+          event.state.processingState == AudioProcessingState.loading,
+      bufferedPosition: event.state.bufferedPosition,
+      errorMessage: () => event.state.errorMessage,
+    ));
+  }
+
+  void _onCurrentMediaItemChanged(
+    CurrentMediaItemChangedEvent event,
+    Emitter<PlayerStatus> emit,
+  ) {
+    final mediaItem = event.item;
+    if (mediaItem == null) {
+      emit(state.copyWith(currentTrack: () => null));
+      return;
+    }
+
+    // Attempt to map back current Track from current queue
+    final track = state.queue.firstWhere(
+      (t) => t.id == mediaItem.id,
+      orElse: () => Track(
+        id: mediaItem.id,
+        title: mediaItem.title,
+        artist: mediaItem.artist,
+        album: mediaItem.album,
+        albumArtUrl: mediaItem.artUri?.toString(),
+      ),
+    );
+
+    emit(state.copyWith(currentTrack: () => track));
+    
+    // Log playback for analytics when the active track rotates
+    _playerRepository.logPlayback(track.id);
+  }
+
+  void _onPlayerPositionChanged(
+    PlayerPositionChangedEvent event,
+    Emitter<PlayerStatus> emit,
+  ) {
+    emit(state.copyWith(position: event.position));
+  }
+
+  void _onPlayerDurationChanged(
+    PlayerDurationChangedEvent event,
+    Emitter<PlayerStatus> emit,
+  ) {
+    emit(state.copyWith(duration: event.duration ?? Duration.zero));
+  }
+}
