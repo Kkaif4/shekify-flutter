@@ -6,6 +6,7 @@ import '../../../player/presentation/controllers/player_bloc.dart';
 import '../controllers/library_bloc.dart';
 import '../widgets/sliver_track_list.dart';
 import 'playlist_details_screen.dart';
+import '../../../../core/services/toast_service.dart';
 
 class LibraryScreen extends StatefulWidget {
   const LibraryScreen({super.key});
@@ -128,9 +129,7 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 AddSongToPlaylistEvent(pl.id, track),
                               );
                               Navigator.pop(dialogCtx);
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Added to ${pl.name}')),
-                              );
+                              ToastService.showSuccess('Added to ${pl.name}', title: 'Playlist Updated');
                             },
                           );
                         },

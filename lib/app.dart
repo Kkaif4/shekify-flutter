@@ -14,6 +14,8 @@ import 'features/player/data/player_repository.dart';
 import 'features/player/presentation/controllers/player_bloc.dart';
 import 'features/player/presentation/widgets/glass_player_footer.dart';
 
+import 'core/services/toast_service.dart';
+
 class ShekifyApp extends StatelessWidget {
   final AppDatabase database;
   final ShekifyAudioHandler audioHandler;
@@ -48,6 +50,7 @@ class ShekifyApp extends StatelessWidget {
           ),
         ],
         child: MaterialApp(
+          navigatorKey: navigatorKey,
           title: 'Shekify',
           theme: AppTheme.darkTheme,
           debugShowCheckedModeBanner: false,

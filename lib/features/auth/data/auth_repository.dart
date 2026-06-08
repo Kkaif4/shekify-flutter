@@ -18,8 +18,8 @@ class AuthRepository {
       },
     );
 
-    final String accessToken = response.data['accessToken'];
-    final String refreshToken = response.data['refreshToken'];
+    final String accessToken = response.data['accessToken'] ?? response.data['token'] ?? '';
+    final String refreshToken = response.data['refreshToken'] ?? '';
     
     // Server returns user details, but if missing, decode from JWT
     Map<String, dynamic>? userJson = response.data['user'];

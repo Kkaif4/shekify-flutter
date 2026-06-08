@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../player/presentation/controllers/player_bloc.dart';
 import '../controllers/library_bloc.dart';
 import '../widgets/sliver_track_list.dart';
+import '../../../../core/services/toast_service.dart';
 
 class PlaylistDetailsScreen extends StatefulWidget {
   final String playlistId;
@@ -159,9 +159,7 @@ class _PlaylistDetailsScreenState extends State<PlaylistDetailsScreen> {
                       },
                       onRemoveFromPlaylist: (track) {
                         context.read<LibraryBloc>().add(RemoveSongFromPlaylistEvent(playlist.id, track.id));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Removed ${track.title} from ${playlist.name}')),
-                        );
+                        ToastService.showInfo('Removed ${track.title} from ${playlist.name}', title: 'Track Removed');
                       },
                     ),
                   ],

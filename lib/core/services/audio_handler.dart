@@ -1,5 +1,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'secure_storage.dart';
+import 'cache_manager.dart';
 
 Future<AudioHandler> initAudioService() async {
   return await AudioService.init(
@@ -78,12 +80,32 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
   Future<void> playMediaItem(MediaItem item) async {
     mediaItem.add(item);
     try {
-      // Setup the URL or local file path
-      final uri = Uri.parse(item.extras?['url'] ?? '');
-      if (uri.isScheme('FILE')) {
-        await _player.setAudioSource(AudioSource.file(uri.toFilePath()));
+      String urlStr = item.extras?['url'] ?? '';
+      
+      // Check if the track has been cached locally (skip web as caching is disabled there)
+      final uri = Uri.parse(urlStr);
+      if (!uri.scheme.toLowerCase().startsWith('file')) {
+        final isCached = await CacheManager.instance.isCached(item.id);
+        if (isCached) {
+          final file = await CacheManager.instance.getCacheFile(item.id);
+          urlStr = 'file://${file.path}';
+        }
+      }
+
+      final finalUri = Uri.parse(urlStr);
+      if (finalUri.scheme.toLowerCase() == 'file') {
+        await _player.setAudioSource(AudioSource.file(finalUri.toFilePath()));
       } else {
-        await _player.setAudioSource(AudioSource.uri(uri));
+        final token = await SecureStorage.instance.getAccessToken();
+        await _player.setAudioSource(
+          AudioSource.uri(
+            finalUri,
+            headers: {
+              if (token != null) 'Authorization': 'Bearer $token',
+              'ngrok-skip-browser-warning': 'true',
+            },
+          ),
+        );
       }
       play();
     } catch (e) {

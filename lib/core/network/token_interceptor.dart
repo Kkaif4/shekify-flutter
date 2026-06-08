@@ -30,7 +30,7 @@ class TokenInterceptor extends Interceptor {
             data: {'refreshToken': refreshToken},
           );
 
-          final newAccessToken = response.data['accessToken'];
+          final newAccessToken = response.data['accessToken'] ?? response.data['token'];
           await _storage.saveAccessToken(newAccessToken);
 
           // Retry the failed original request with the new access token

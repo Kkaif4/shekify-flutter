@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/api_client.dart';
@@ -34,6 +35,10 @@ class PlayerRepository {
   Future<String> getAudioSourcePath(String songId) async {
     final streamUrl = ApiEndpoints.getStreamUrl(songId);
 
+    if (kIsWeb) {
+      return streamUrl;
+    }
+
     // 1. Check database/cache status
     final isSongCached = await _cache.isCached(songId);
     if (isSongCached) {
@@ -41,26 +46,27 @@ class PlayerRepository {
       return 'file://${file.path}';
     }
 
-    // 2. Fetch track offline path dynamically by checking cache download
-    final localPath = await _cache.downloadAndCache(songId, streamUrl);
-    if (localPath != null) {
-      // Update local Drift DB record with downloaded path
-      final song = await _db.getSongById(songId);
-      if (song != null) {
-        await _db.insertSong(Song(
-          id: song.id,
-          title: song.title,
-          artist: song.artist,
-          album: song.album,
-          year: song.year,
-          filePath: localPath,
-          albumArtUrl: song.albumArtUrl,
-        ));
+    // 2. Start download in background (non-blocking) and return streamUrl immediately
+    _cache.downloadAndCache(songId, streamUrl).then((localPath) async {
+      if (localPath != null) {
+        // Update local Drift DB record with downloaded path
+        final song = await _db.getSongById(songId);
+        if (song != null) {
+          await _db.insertSong(Song(
+            id: song.id,
+            title: song.title,
+            artist: song.artist,
+            album: song.album,
+            year: song.year,
+            filePath: localPath,
+            albumArtUrl: song.albumArtUrl,
+          ));
+        }
       }
-      return 'file://$localPath';
-    }
+    }).catchError((e) {
+      print('Background download failed: $e');
+    });
 
-    // Fallback to live network stream URL if cache download failed
     return streamUrl;
   }
 }

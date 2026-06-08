@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../constants/api_endpoints.dart';
 import '../services/secure_storage.dart';
+import 'error_interceptor.dart';
 import 'token_interceptor.dart';
 
 class ApiClient {
@@ -18,6 +19,7 @@ class ApiClient {
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
         },
       ),
     );
@@ -27,6 +29,9 @@ class ApiClient {
       requestBody: true,
       responseBody: true,
     ));
+    dio.interceptors.add(
+      ErrorInterceptor(),
+    );
     dio.interceptors.add(
       TokenInterceptor(SecureStorage.instance, dio),
     );

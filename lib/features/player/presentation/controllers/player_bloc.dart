@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/services/audio_handler.dart';
 import '../../data/player_repository.dart';
 import '../../domain/track.dart';
@@ -102,6 +103,7 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
   final PlayerRepository _playerRepository;
   final ShekifyAudioHandler _audioHandler;
   late final List<StreamSubscription> _subscriptions;
+  String? _prefetchedSongId;
 
   PlayerBloc(this._playerRepository, this._audioHandler) : super(PlayerStatus()) {
     on<PlayTrackEvent>(_onPlayTrack);
@@ -151,8 +153,8 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
       queue: [track],
     ));
 
-    final localSource = await _playerRepository.getAudioSourcePath(track.id);
-    final mediaItem = track.toMediaItem(localSource);
+    final streamUrl = ApiEndpoints.getStreamUrl(track.id);
+    final mediaItem = track.toMediaItem(streamUrl);
     
     await _audioHandler.updateQueue([mediaItem]);
     await _audioHandler.playMediaItem(mediaItem);
@@ -169,24 +171,15 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
 
     final mediaItems = <MediaItem>[];
     for (final track in event.queue) {
-      // Setup relative placeholders for fast queue updates
-      mediaItems.add(track.toMediaItem(''));
+      final streamUrl = ApiEndpoints.getStreamUrl(track.id);
+      mediaItems.add(track.toMediaItem(streamUrl));
     }
     await _audioHandler.updateQueue(mediaItems);
 
     final startTrack = event.queue[event.startIndex];
-    final localSource = await _playerRepository.getAudioSourcePath(startTrack.id);
-    final mediaItem = startTrack.toMediaItem(localSource);
+    final startMediaItem = mediaItems[event.startIndex];
 
-    // Update the media item inside the handler queue with valid url
-    final updatedQueue = List<MediaItem>.from(_audioHandler.queue.value);
-    final idx = updatedQueue.indexWhere((item) => item.id == startTrack.id);
-    if (idx != -1) {
-      updatedQueue[idx] = mediaItem;
-      await _audioHandler.updateQueue(updatedQueue);
-    }
-
-    await _audioHandler.playMediaItem(mediaItem);
+    await _audioHandler.playMediaItem(startMediaItem);
     await _playerRepository.logPlayback(startTrack.id);
   }
 
@@ -227,6 +220,7 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
     CurrentMediaItemChangedEvent event,
     Emitter<PlayerStatus> emit,
   ) {
+    _prefetchedSongId = null;
     final mediaItem = event.item;
     if (mediaItem == null) {
       emit(state.copyWith(currentTrack: () => null));
@@ -256,6 +250,22 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
     Emitter<PlayerStatus> emit,
   ) {
     emit(state.copyWith(position: event.position));
+
+    final duration = state.duration;
+    final currentTrack = state.currentTrack;
+    if (duration != Duration.zero && currentTrack != null) {
+      final progress = event.position.inMilliseconds / duration.inMilliseconds;
+      if (progress >= 0.8) {
+        final currentIdx = state.queue.indexWhere((t) => t.id == currentTrack.id);
+        if (currentIdx != -1 && currentIdx < state.queue.length - 1) {
+          final nextTrack = state.queue[currentIdx + 1];
+          if (_prefetchedSongId != nextTrack.id) {
+            _prefetchedSongId = nextTrack.id;
+            _playerRepository.getAudioSourcePath(nextTrack.id);
+          }
+        }
+      }
+    }
   }
 
   void _onPlayerDurationChanged(
