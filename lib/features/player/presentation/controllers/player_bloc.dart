@@ -33,6 +33,10 @@ class NextTrackEvent extends PlayerEvent {}
 
 class PreviousTrackEvent extends PlayerEvent {}
 
+class ToggleShuffleEvent extends PlayerEvent {}
+
+class ToggleAutoplayEvent extends PlayerEvent {}
+
 class PlaybackStateChangedEvent extends PlayerEvent {
   final PlaybackState state;
   PlaybackStateChangedEvent(this.state);
@@ -63,6 +67,8 @@ class PlayerStatus {
   final Duration bufferedPosition;
   final Duration duration;
   final String? errorMessage;
+  final bool isShuffle;
+  final bool isAutoplay;
 
   PlayerStatus({
     this.currentTrack,
@@ -73,6 +79,8 @@ class PlayerStatus {
     this.bufferedPosition = Duration.zero,
     this.duration = Duration.zero,
     this.errorMessage,
+    this.isShuffle = false,
+    this.isAutoplay = true,
   });
 
   PlayerStatus copyWith({
@@ -84,6 +92,8 @@ class PlayerStatus {
     Duration? bufferedPosition,
     Duration? duration,
     String? Function()? errorMessage,
+    bool? isShuffle,
+    bool? isAutoplay,
   }) {
     return PlayerStatus(
       currentTrack: currentTrack != null ? currentTrack() : this.currentTrack,
@@ -94,6 +104,8 @@ class PlayerStatus {
       bufferedPosition: bufferedPosition ?? this.bufferedPosition,
       duration: duration ?? this.duration,
       errorMessage: errorMessage != null ? errorMessage() : this.errorMessage,
+      isShuffle: isShuffle ?? this.isShuffle,
+      isAutoplay: isAutoplay ?? this.isAutoplay,
     );
   }
 }
@@ -117,6 +129,8 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
     on<CurrentMediaItemChangedEvent>(_onCurrentMediaItemChanged);
     on<PlayerPositionChangedEvent>(_onPlayerPositionChanged);
     on<PlayerDurationChangedEvent>(_onPlayerDurationChanged);
+    on<ToggleShuffleEvent>(_onToggleShuffle);
+    on<ToggleAutoplayEvent>(_onToggleAutoplay);
 
     // Subscribe to ShekifyAudioHandler streams to keep BLoC in sync
     _subscriptions = [
@@ -273,5 +287,23 @@ class PlayerBloc extends Bloc<PlayerEvent, PlayerStatus> {
     Emitter<PlayerStatus> emit,
   ) {
     emit(state.copyWith(duration: event.duration ?? Duration.zero));
+  }
+
+  void _onToggleShuffle(
+    ToggleShuffleEvent event,
+    Emitter<PlayerStatus> emit,
+  ) {
+    final newVal = !state.isShuffle;
+    _audioHandler.isShuffle = newVal;
+    emit(state.copyWith(isShuffle: newVal));
+  }
+
+  void _onToggleAutoplay(
+    ToggleAutoplayEvent event,
+    Emitter<PlayerStatus> emit,
+  ) {
+    final newVal = !state.isAutoplay;
+    _audioHandler.isAutoplay = newVal;
+    emit(state.copyWith(isAutoplay: newVal));
   }
 }

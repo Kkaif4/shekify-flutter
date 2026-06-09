@@ -32,17 +32,17 @@ class GlassPlayerFooter extends StatelessWidget {
             margin: const EdgeInsets.all(12),
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
-              color: AppColors.surfaceContainer.withValues(alpha: 0.6),
+              color: AppColors.backgroundSecondary,
               border: Border.all(
-                color: Colors.white.withValues(alpha: 0.05),
+                color: AppColors.outlineVariant,
                 width: 1,
               ),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  offset: const Offset(0, -2),
                 ),
               ],
             ),

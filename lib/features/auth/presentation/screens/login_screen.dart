@@ -59,6 +59,30 @@ class _LoginScreenState extends State<LoginScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
+                      // App Icon
+                      Container(
+                        width: 100,
+                        height: 100,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(24),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary.withValues(alpha: 0.3),
+                              blurRadius: 40,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Image.asset(
+                            'assets/logo.png',
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AppTheme.spacingMd),
+
                       // Brand Header
                       Text(
                         'Shekify',
@@ -105,14 +129,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         child: Column(
                           children: [
-                            // Email Field
+                            // User Name Field
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Padding(
                                   padding: const EdgeInsets.only(left: 4.0),
                                   child: Text(
-                                    'Email Address',
+                                    'User Name',
                                     style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
                                           color: AppColors.textSecondary,
@@ -125,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   keyboardType: TextInputType.emailAddress,
                                   style: Theme.of(context).textTheme.bodyLarge,
                                   decoration: InputDecoration(
-                                    hintText: 'name@domain.com',
+                                    hintText: 'Username',
                                     prefixIcon: const Icon(Icons.mail_outline),
                                     contentPadding: const EdgeInsets.symmetric(
                                       horizontal: 16.0,
@@ -156,18 +180,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                               color: AppColors.textSecondary,
                                             ),
                                       ),
-                                      GestureDetector(
-                                        onTap: () {},
-                                        child: Text(
-                                          'Forgot Password?',
-                                          style: Theme.of(context)
-                                              .textTheme
-                                              .bodySmall
-                                              ?.copyWith(
-                                                color: AppColors.primary,
-                                              ),
-                                        ),
-                                      ),
+                                      // GestureDetector(
+                                      //   onTap: () {},
+                                      //   child: Text(
+                                      //     'Forgot Password - soon !',
+                                      //     style: Theme.of(context)
+                                      //         .textTheme
+                                      //         .bodySmall
+                                      //         ?.copyWith(
+                                      //           color: AppColors.primary,
+                                      //         ),
+                                      //   ),
+                                      // ),
                                     ],
                                   ),
                                 ),
@@ -247,15 +271,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
 
                       const SizedBox(height: AppTheme.spacingXl),
-
-                      // Footer
-                      Text(
-                        'Don\'t have an account? Sign Up',
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
                     ],
                   ),
                 ),

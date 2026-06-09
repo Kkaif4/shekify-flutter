@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter/foundation.dart';
@@ -19,6 +20,16 @@ Future<AudioHandler> initAudioService() async {
 
 class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandler {
   final AudioPlayer _player = AudioPlayer();
+  final Random _random = Random();
+
+  bool _isShuffle = false;
+  bool _isAutoplay = true;
+
+  bool get isShuffle => _isShuffle;
+  bool get isAutoplay => _isAutoplay;
+
+  set isShuffle(bool value) => _isShuffle = value;
+  set isAutoplay(bool value) => _isAutoplay = value;
 
   ShekifyAudioHandler() {
     _initStreams();
@@ -30,9 +41,9 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
     // 1. Forward playback events to audio_service
     _player.playbackEventStream.map(_transformEvent).pipe(playbackState);
 
-    // 2. Listen for track completions to automatically skip next
+    // 2. Listen for track completions to automatically skip next (respects autoplay)
     _player.processingStateStream.listen((state) {
-      if (state == ProcessingState.completed) {
+      if (state == ProcessingState.completed && _isAutoplay) {
         skipToNext();
       }
     });
@@ -55,15 +66,25 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
 
   @override
   Future<void> skipToNext() async {
-    // Handled by our BLoC coordinating the queues, or we can handle it directly if we populate queue
-    // Since BLoC coordinates the queue and sends commands to play the next song, we can also dispatch events here.
-    // If there is an active queue in audio_handler, let's skip inside it:
     final currentMediaItem = mediaItem.value;
     if (currentMediaItem == null) return;
-    final currentIdx = queue.value.indexWhere((item) => item.id == currentMediaItem.id);
-    if (currentIdx != -1 && currentIdx < queue.value.length - 1) {
-      final nextItem = queue.value[currentIdx + 1];
-      await playMediaItem(nextItem);
+    final q = queue.value;
+    if (q.isEmpty) return;
+
+    if (_isShuffle) {
+      // Pick a random index that is different from the current one
+      final currentIdx = q.indexWhere((item) => item.id == currentMediaItem.id);
+      if (q.length <= 1) return;
+      int nextIdx;
+      do {
+        nextIdx = _random.nextInt(q.length);
+      } while (nextIdx == currentIdx);
+      await playMediaItem(q[nextIdx]);
+    } else {
+      final currentIdx = q.indexWhere((item) => item.id == currentMediaItem.id);
+      if (currentIdx != -1 && currentIdx < q.length - 1) {
+        await playMediaItem(q[currentIdx + 1]);
+      }
     }
   }
 

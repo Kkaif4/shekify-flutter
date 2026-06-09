@@ -144,10 +144,18 @@ class _MainAppShellState extends State<MainAppShell> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.music_note, size: 36, color: AppColors.accent),
-                    SizedBox(height: 8),
-                    Text(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Image.asset(
+                        'assets/logo.png',
+                        width: 56,
+                        height: 56,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
                       'Shekify',
                       style: TextStyle(
                         color: AppColors.textPrimary,

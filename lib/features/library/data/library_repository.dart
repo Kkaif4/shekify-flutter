@@ -19,7 +19,12 @@ class LibraryRepository {
         queryParameters: {'search': query},
       );
       final List<dynamic> list = response.data['data'] ?? [];
-      final tracks = list.map((json) => Track.fromJson(json)).toList();
+      final tracks = list.map((json) {
+        final t = Track.fromJson(json);
+        return t.albumArtUrl != null && t.albumArtUrl!.isNotEmpty
+            ? t
+            : t.copyWith(albumArtUrl: ApiEndpoints.getCoverUrl(t.id));
+      }).toList();
 
       // Save searched tracks locally in background to keep local DB populated
       for (final track in tracks) {
@@ -88,7 +93,12 @@ class LibraryRepository {
       // Fetch from backend API (GET /api/songs without search param)
       final response = await _dio.get(ApiEndpoints.songs);
       final List<dynamic> list = response.data['data'] ?? [];
-      final tracks = list.map((json) => Track.fromJson(json)).toList();
+      final tracks = list.map((json) {
+        final t = Track.fromJson(json);
+        return t.albumArtUrl != null && t.albumArtUrl!.isNotEmpty
+            ? t
+            : t.copyWith(albumArtUrl: ApiEndpoints.getCoverUrl(t.id));
+      }).toList();
 
       // Save fetched tracks locally in background to keep local DB populated
       for (final track in tracks) {
@@ -127,6 +137,81 @@ class LibraryRepository {
         print('Failed to read local songs: $localErr');
         return [];
       }
+    }
+  }
+
+  /// Paginated songs fetch for scroll-driven loading
+  Future<({List<Track> tracks, int total, int page, int totalPages})> getSongsPaginated({
+    int page = 1,
+    int limit = 20,
+    String? search,
+  }) async {
+    try {
+      final queryParams = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+      if (search != null && search.trim().isNotEmpty) {
+        queryParams['search'] = search.trim();
+      }
+      final response = await _dio.get(
+        ApiEndpoints.songs,
+        queryParameters: queryParams,
+      );
+      final List<dynamic> list = response.data['data'] ?? [];
+      final total = response.data['total'] ?? 0;
+      final currentPage = response.data['page'] ?? page;
+      final totalPages = response.data['totalPages'] ?? 1;
+
+      final tracks = list.map((json) {
+        final t = Track.fromJson(json);
+        return t.albumArtUrl != null && t.albumArtUrl!.isNotEmpty
+            ? t
+            : t.copyWith(albumArtUrl: ApiEndpoints.getCoverUrl(t.id));
+      }).toList();
+
+      // Sync tracks locally
+      for (final track in tracks) {
+        await _db.insertSong(
+          db.Song(
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            year: track.year,
+            filePath: track.filePath,
+            albumArtUrl: track.albumArtUrl ?? ApiEndpoints.getCoverUrl(track.id),
+          ),
+        );
+      }
+
+      return (
+        tracks: tracks,
+        total: total as int,
+        page: currentPage as int,
+        totalPages: totalPages as int,
+      );
+    } catch (e) {
+      print('Paginated fetch failed: $e');
+      // Fall back to local DB
+      final localSongs = await _db.getAllSongs();
+      final tracks = localSongs
+          .map((song) => Track(
+                id: song.id,
+                title: song.title,
+                artist: song.artist,
+                album: song.album,
+                year: song.year,
+                filePath: song.filePath,
+                albumArtUrl: song.albumArtUrl,
+              ))
+          .toList();
+      return (
+        tracks: tracks,
+        total: tracks.length,
+        page: 1,
+        totalPages: 1,
+      );
     }
   }
 

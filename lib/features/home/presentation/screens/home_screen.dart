@@ -5,7 +5,6 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../player/presentation/controllers/player_bloc.dart';
 import '../../../library/presentation/widgets/sliver_track_list.dart';
 import '../../../library/presentation/controllers/library_bloc.dart';
-import '../../../library/data/library_repository.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -15,10 +14,34 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
-    context.read<LibraryBloc>().add(FetchPlaylists());
+    // Fetch the first page of songs
+    context.read<LibraryBloc>().add(FetchHomeSongsEvent(isRefresh: true));
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_isNearBottom) {
+      context.read<LibraryBloc>().add(FetchHomeSongsEvent());
+    }
+  }
+
+  bool get _isNearBottom {
+    if (!_scrollController.hasClients) return false;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final currentScroll = _scrollController.offset;
+    // Trigger at 85% depth
+    return currentScroll >= maxScroll * 0.85;
   }
 
   @override
@@ -35,6 +58,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: SafeArea(
           child: CustomScrollView(
+            controller: _scrollController,
             slivers: [
               const SliverToBoxAdapter(
                 child: Padding(
@@ -52,8 +76,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
               BlocBuilder<LibraryBloc, LibraryState>(
                 buildWhen: (prev, current) =>
-                    current is SongSearchLoaded || current is PlaylistsLoaded,
+                    current is HomeSongsLoaded ||
+                    current is PlaylistsLoading ||
+                    current is SongSearchLoaded,
                 builder: (context, state) {
+                  // If search results are showing, use those
                   if (state is SongSearchLoaded && state.tracks.isNotEmpty) {
                     return SliverTrackList(
                       tracks: state.tracks,
@@ -63,35 +90,62 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   }
 
-                  return FutureBuilder<List<dynamic>>(
-                    future: RepositoryProvider.of<LibraryRepository>(
-                      context,
-                    ).getAllSongs(),
-                    builder: (ctx, snap) {
-                      if (snap.connectionState == ConnectionState.waiting) {
-                        return const SliverToBoxAdapter(
-                          child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 48.0),
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                color: AppColors.primary,
-                              ),
+                  // Initial loading state
+                  if (state is PlaylistsLoading) {
+                    return const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 48.0),
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    );
+                  }
+
+                  // Paginated song list
+                  if (state is HomeSongsLoaded) {
+                    return SliverTrackList(
+                      tracks: state.tracks,
+                      onTrackTap: (track) =>
+                          context.read<PlayerBloc>().add(PlayTrackEvent(track)),
+                      onAddToPlaylist: (track) => _showAddDialog(track),
+                    );
+                  }
+
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
+                },
+              ),
+
+              // Bottom loading indicator for pagination
+              BlocBuilder<LibraryBloc, LibraryState>(
+                buildWhen: (prev, current) => current is HomeSongsLoaded,
+                builder: (context, state) {
+                  if (state is HomeSongsLoaded && state.isLoadingMore) {
+                    return const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24.0),
+                        child: Center(
+                          child: SizedBox(
+                            width: 28,
+                            height: 28,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.accent,
                             ),
                           ),
-                        );
-                      }
-
-                      final tracks = snap.data ?? [];
-                      return SliverTrackList(
-                        tracks: tracks.cast(),
-                        onTrackTap: (track) => context.read<PlayerBloc>().add(
-                          PlayTrackEvent(track),
                         ),
-                        onAddToPlaylist: (track) => _showAddDialog(track),
-                      );
-                    },
-                  );
+                      ),
+                    );
+                  }
+                  return const SliverToBoxAdapter(child: SizedBox.shrink());
                 },
+              ),
+
+              // Bottom padding so player footer doesn't cover last items
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 100),
               ),
             ],
           ),
@@ -100,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showAddDialog(track) {
+  void _showAddDialog(dynamic track) {
     final libraryBloc = context.read<LibraryBloc>();
     showDialog(
       context: context,

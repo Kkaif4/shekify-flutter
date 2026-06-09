@@ -8,6 +8,11 @@ abstract class LibraryEvent {}
 
 class FetchPlaylists extends LibraryEvent {}
 
+class FetchHomeSongsEvent extends LibraryEvent {
+  final bool isRefresh;
+  FetchHomeSongsEvent({this.isRefresh = false});
+}
+
 class CreatePlaylistEvent extends LibraryEvent {
   final String name;
   CreatePlaylistEvent(this.name);
@@ -71,12 +76,45 @@ class LibraryError extends LibraryState {
   LibraryError(this.message);
 }
 
+class HomeSongsLoaded extends LibraryState {
+  final List<Track> tracks;
+  final int page;
+  final int totalPages;
+  final bool isLoadingMore;
+  final bool hasReachedMax;
+
+  HomeSongsLoaded({
+    required this.tracks,
+    required this.page,
+    required this.totalPages,
+    this.isLoadingMore = false,
+    this.hasReachedMax = false,
+  });
+
+  HomeSongsLoaded copyWith({
+    List<Track>? tracks,
+    int? page,
+    int? totalPages,
+    bool? isLoadingMore,
+    bool? hasReachedMax,
+  }) {
+    return HomeSongsLoaded(
+      tracks: tracks ?? this.tracks,
+      page: page ?? this.page,
+      totalPages: totalPages ?? this.totalPages,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasReachedMax: hasReachedMax ?? this.hasReachedMax,
+    );
+  }
+}
+
 // --- BLoC ---
 class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
   final LibraryRepository _libraryRepository;
 
   LibraryBloc(this._libraryRepository) : super(LibraryInitial()) {
     on<FetchPlaylists>(_onFetchPlaylists);
+    on<FetchHomeSongsEvent>(_onFetchHomeSongs);
     on<CreatePlaylistEvent>(_onCreatePlaylist);
     on<DeletePlaylistEvent>(_onDeletePlaylist);
     on<FetchPlaylistDetailsEvent>(_onFetchPlaylistDetails);
@@ -93,6 +131,45 @@ class LibraryBloc extends Bloc<LibraryEvent, LibraryState> {
     try {
       final playlists = await _libraryRepository.getPlaylists();
       emit(PlaylistsLoaded(playlists));
+    } catch (e) {
+      emit(LibraryError(e.toString()));
+    }
+  }
+
+  Future<void> _onFetchHomeSongs(
+    FetchHomeSongsEvent event,
+    Emitter<LibraryState> emit,
+  ) async {
+    final currentState = state;
+    int nextPage = 1;
+    List<Track> existingTracks = [];
+
+    if (event.isRefresh) {
+      emit(PlaylistsLoading());
+    } else if (currentState is HomeSongsLoaded) {
+      if (currentState.hasReachedMax || currentState.isLoadingMore) return;
+      nextPage = currentState.page + 1;
+      existingTracks = currentState.tracks;
+      emit(currentState.copyWith(isLoadingMore: true));
+    } else {
+      emit(PlaylistsLoading());
+    }
+
+    try {
+      final result = await _libraryRepository.getSongsPaginated(
+        page: nextPage,
+        limit: 20,
+      );
+
+      final allTracks = [...existingTracks, ...result.tracks];
+      final hasReachedMax = nextPage >= result.totalPages;
+
+      emit(HomeSongsLoaded(
+        tracks: allTracks,
+        page: nextPage,
+        totalPages: result.totalPages,
+        hasReachedMax: hasReachedMax,
+      ));
     } catch (e) {
       emit(LibraryError(e.toString()));
     }
