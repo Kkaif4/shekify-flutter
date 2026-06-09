@@ -82,6 +82,54 @@ class LibraryRepository {
     }
   }
 
+  // Get all songs from backend API (used for Home feed), fall back to local DB
+  Future<List<Track>> getAllSongs() async {
+    try {
+      // Fetch from backend API (GET /api/songs without search param)
+      final response = await _dio.get(ApiEndpoints.songs);
+      final List<dynamic> list = response.data['data'] ?? [];
+      final tracks = list.map((json) => Track.fromJson(json)).toList();
+
+      // Save fetched tracks locally in background to keep local DB populated
+      for (final track in tracks) {
+        await _db.insertSong(
+          db.Song(
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            year: track.year,
+            filePath: track.filePath,
+            albumArtUrl:
+                track.albumArtUrl ?? ApiEndpoints.getCoverUrl(track.id),
+          ),
+        );
+      }
+      return tracks;
+    } catch (e) {
+      print('Network getAllSongs failed, falling back to local DB: $e');
+      try {
+        final localSongs = await _db.getAllSongs();
+        return localSongs
+            .map(
+              (song) => Track(
+                id: song.id,
+                title: song.title,
+                artist: song.artist,
+                album: song.album,
+                year: song.year,
+                filePath: song.filePath,
+                albumArtUrl: song.albumArtUrl,
+              ),
+            )
+            .toList();
+      } catch (localErr) {
+        print('Failed to read local songs: $localErr');
+        return [];
+      }
+    }
+  }
+
   // Get details and tracks for a playlist
   Future<Playlist> getPlaylistDetails(String playlistId) async {
     try {

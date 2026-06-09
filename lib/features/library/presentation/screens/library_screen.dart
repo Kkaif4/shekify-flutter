@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/theme/app_colors.dart';
-import '../../../../core/theme/app_theme.dart';
 import '../../../player/presentation/controllers/player_bloc.dart';
 import '../controllers/library_bloc.dart';
 import '../widgets/sliver_track_list.dart';
@@ -129,7 +128,10 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 AddSongToPlaylistEvent(pl.id, track),
                               );
                               Navigator.pop(dialogCtx);
-                              ToastService.showSuccess('Added to ${pl.name}', title: 'Playlist Updated');
+                              ToastService.showSuccess(
+                                'Added to ${pl.name}',
+                                title: 'Playlist Updated',
+                              );
                             },
                           );
                         },
@@ -163,8 +165,18 @@ class _LibraryScreenState extends State<LibraryScreen> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: PremiumGlassContainer(
+                        child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceContainer.withValues(
+                              alpha: 0.6,
+                            ),
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              width: 1,
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                           child: TextField(
                             controller: _searchController,
                             style: const TextStyle(
@@ -309,7 +321,9 @@ class _LibraryScreenState extends State<LibraryScreen> {
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: const Icon(

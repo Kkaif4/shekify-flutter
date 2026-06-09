@@ -10,6 +10,7 @@ import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/library/data/library_repository.dart';
 import 'features/library/presentation/controllers/library_bloc.dart';
 import 'features/library/presentation/screens/library_screen.dart';
+import 'features/home/presentation/screens/home_screen.dart';
 import 'features/player/data/player_repository.dart';
 import 'features/player/presentation/controllers/player_bloc.dart';
 import 'features/player/presentation/widgets/glass_player_footer.dart';
@@ -31,22 +32,25 @@ class ShekifyApp extends StatelessWidget {
     return MultiRepositoryProvider(
       providers: [
         RepositoryProvider<AuthRepository>(create: (_) => AuthRepository()),
-        RepositoryProvider<LibraryRepository>(create: (_) => LibraryRepository(database)),
-        RepositoryProvider<PlayerRepository>(create: (_) => PlayerRepository(database)),
+        RepositoryProvider<LibraryRepository>(
+          create: (_) => LibraryRepository(database),
+        ),
+        RepositoryProvider<PlayerRepository>(
+          create: (_) => PlayerRepository(database),
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
           BlocProvider<AuthBloc>(
-            create: (ctx) => AuthBloc(ctx.read<AuthRepository>())..add(AuthCheckRequested()),
+            create: (ctx) =>
+                AuthBloc(ctx.read<AuthRepository>())..add(AuthCheckRequested()),
           ),
           BlocProvider<LibraryBloc>(
             create: (ctx) => LibraryBloc(ctx.read<LibraryRepository>()),
           ),
           BlocProvider<PlayerBloc>(
-            create: (ctx) => PlayerBloc(
-              ctx.read<PlayerRepository>(),
-              audioHandler,
-            ),
+            create: (ctx) =>
+                PlayerBloc(ctx.read<PlayerRepository>(), audioHandler),
           ),
         ],
         child: MaterialApp(
@@ -87,8 +91,26 @@ class AppRootNavigator extends StatelessWidget {
   }
 }
 
-class MainAppShell extends StatelessWidget {
+class MainAppShell extends StatefulWidget {
   const MainAppShell({super.key});
+
+  @override
+  State<MainAppShell> createState() => _MainAppShellState();
+}
+
+class _MainAppShellState extends State<MainAppShell> {
+  int _selectedIndex = 0;
+
+  Widget _bodyForIndex(int idx) {
+    switch (idx) {
+      case 0:
+        return const HomeScreen();
+      case 1:
+        return const LibraryScreen();
+      default:
+        return const HomeScreen();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -111,17 +133,81 @@ class MainAppShell extends StatelessWidget {
           ),
         ],
       ),
+      drawer: Drawer(
+        backgroundColor: AppColors.backgroundSecondary,
+        child: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              DrawerHeader(
+                decoration: BoxDecoration(color: AppColors.backgroundCard),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: const [
+                    Icon(Icons.music_note, size: 36, color: AppColors.accent),
+                    SizedBox(height: 8),
+                    Text(
+                      'Shekify',
+                      style: TextStyle(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.home, color: AppColors.textSecondary),
+                title: const Text(
+                  'Home',
+                  style: TextStyle(color: AppColors.textPrimary),
+                ),
+                selected: _selectedIndex == 0,
+                onTap: () {
+                  setState(() => _selectedIndex = 0);
+                  Navigator.pop(context);
+                },
+              ),
+              ListTile(
+                leading: const Icon(
+                  Icons.library_music,
+                  color: AppColors.textSecondary,
+                ),
+                title: const Text(
+                  'Library',
+                  style: TextStyle(color: AppColors.textPrimary),
+                ),
+                selected: _selectedIndex == 1,
+                onTap: () {
+                  setState(() => _selectedIndex = 1);
+                  Navigator.pop(context);
+                },
+              ),
+              const Spacer(),
+              Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: ElevatedButton.icon(
+                  onPressed: () =>
+                      context.read<AuthBloc>().add(AuthLogoutRequested()),
+                  icon: const Icon(Icons.logout),
+                  label: const Text('Sign out'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
       body: Stack(
         children: [
-          // Primary screen body
-          const LibraryScreen(),
-
-          // Floating glass footer player (stays fixed on screen bottom)
+          _bodyForIndex(_selectedIndex),
           const Align(
             alignment: Alignment.bottomCenter,
-            child: SafeArea(
-              child: GlassPlayerFooter(),
-            ),
+            child: SafeArea(child: GlassPlayerFooter()),
           ),
         ],
       ),

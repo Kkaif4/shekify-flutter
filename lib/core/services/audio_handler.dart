@@ -1,7 +1,9 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:flutter/foundation.dart';
 import 'secure_storage.dart';
 import 'cache_manager.dart';
+import 'audio_url_resolver.dart';
 
 Future<AudioHandler> initAudioService() async {
   return await AudioService.init(
@@ -85,14 +87,16 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
       print('DEBUG: Original URL in mediaItem: $urlStr');
       
       // Check if the track has been cached locally (skip web as caching is disabled there)
-      final uri = Uri.parse(urlStr);
-      if (!uri.scheme.toLowerCase().startsWith('file')) {
-        final isCached = await CacheManager.instance.isCached(item.id);
-        print('DEBUG: Cache check for ${item.id}: isCached = $isCached');
-        if (isCached) {
-          final file = await CacheManager.instance.getCacheFile(item.id);
-          urlStr = 'file://${file.path}';
-          print('DEBUG: Found in cache, resolved to: $urlStr');
+      if (!kIsWeb) {
+        final uri = Uri.parse(urlStr);
+        if (!uri.scheme.toLowerCase().startsWith('file')) {
+          final isCached = await CacheManager.instance.isCached(item.id);
+          print('DEBUG: Cache check for ${item.id}: isCached = $isCached');
+          if (isCached) {
+            final file = await CacheManager.instance.getCacheFile(item.id);
+            urlStr = 'file://${file.path}';
+            print('DEBUG: Found in cache, resolved to: $urlStr');
+          }
         }
       }
 
@@ -103,10 +107,12 @@ class ShekifyAudioHandler extends BaseAudioHandler with QueueHandler, SeekHandle
         await _player.setAudioSource(AudioSource.file(finalUri.toFilePath()));
       } else {
         final token = await SecureStorage.instance.getAccessToken();
-        print('DEBUG: Loading remote URI source with auth header. Token present: ${token != null}');
+        print('DEBUG: Loading remote URI source. Token present: ${token != null}');
+        final resolvedUrl = await AudioUrlResolver.resolve(urlStr, token);
+        print('DEBUG: AudioUrlResolver resolved to: $resolvedUrl');
         await _player.setAudioSource(
           AudioSource.uri(
-            finalUri,
+            Uri.parse(resolvedUrl),
             headers: {
               if (token != null) 'Authorization': 'Bearer $token',
               'ngrok-skip-browser-warning': 'true',
